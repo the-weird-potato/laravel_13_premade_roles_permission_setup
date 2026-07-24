@@ -18,10 +18,14 @@ managing roles, permissions and user access.
 
 ## Requirements
 
-- PHP **8.3+** (8.4 recommended) with the usual Laravel extensions
+- PHP **8.3+** (8.4 recommended, and what CI runs) with the usual Laravel extensions
 - Composer 2
-- Node.js **20+** and npm
+- Node.js **22+** (or 20.19+) — Vite 8 requires `^20.19 || >=22.12`. CI runs Node 22.
 - MySQL 8 (default), or SQLite if you prefer
+
+npm is the documented package manager, but the repo also ships a `pnpm-workspace.yaml`,
+so pnpm works too. Note that `.npmrc` sets `ignore-scripts=true`, so dependency lifecycle
+scripts do not run on install.
 
 ## Quick start
 
@@ -112,8 +116,9 @@ the initial migrations — no extra services needed.
 composer dev
 ```
 
-This runs `php artisan dev`, which starts the PHP server, queue worker, log viewer (Pail), and
-Vite dev server together. The app is served at http://localhost:8000.
+This runs `php artisan dev` (provided by `laravel/chisel`), which starts the PHP server, queue
+worker, log viewer (Pail), and Vite dev server together. The app is served at
+http://localhost:8000. Run `php artisan dev:list` to see the registered processes.
 
 To run pieces separately:
 
@@ -125,6 +130,19 @@ php artisan pail       # tail logs
 ```
 
 If a frontend change doesn't show up, make sure `npm run dev` is running or run `npm run build`.
+
+A `/up` health-check endpoint is registered by the framework and returns 200 once the app boots.
+
+### Server-side rendering
+
+SSR is handled by the `@inertiajs/vite` plugin, so it works automatically in dev mode without a
+separate Node server and without an `ssr.tsx` entrypoint of your own. For production:
+
+```bash
+npm run build:ssr          # builds the client bundle, then bootstrap/ssr
+php artisan inertia:start-ssr
+php artisan inertia:check-ssr   # health check
+```
 
 ## Testing
 
@@ -144,10 +162,21 @@ composer lint          # Pint — fix PHP formatting
 composer lint:check    # Pint — check only
 composer types:check   # Larastan / PHPStan
 npm run lint           # ESLint — fix
+npm run lint:check     # ESLint — check only
 npm run format         # Prettier — write
+npm run format:check   # Prettier — check only
 npm run types:check    # tsc --noEmit
 composer ci:check      # everything CI runs
 ```
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs on pushes to `main` and on every pull request. It sets up PHP
+8.4 and Node 22, runs `composer setup`, then `composer ci:check` — which is the frontend checks
+(ESLint, Prettier, `tsc`) plus `composer test` (Pint, Larastan, Pest). Running `composer ci:check`
+locally reproduces the pipeline exactly.
+
+Dependabot is configured in `.github/dependabot.yml` to update GitHub Actions weekly.
 
 ## Project layout
 
@@ -165,15 +194,20 @@ database/
   factories/           Model factories
   migrations/          Schema migrations (users, cache, jobs, passkeys, 2FA, permission tables)
   seeders/             DatabaseSeeder, RolesAndPermissionsSeeder
+resources/css/
+  app.css              Tailwind entrypoint and theme tokens
 resources/js/
   pages/               Inertia page components (routed server-side), incl. pages/admin/, pages/user/
   components/          Reusable React components (incl. can.tsx, permission-picker.tsx)
-  hooks/               React hooks (incl. use-permissions.ts)
+  hooks/               React hooks (incl. use-permissions.ts, use-flash-toast.ts)
   layouts/             Page layouts (app, auth, settings, admin)
   lib/permissions.ts   Permission/role name constants mirroring the PHP catalog
+  types/               Shared TypeScript types (auth, access, navigation, ui) + global.d.ts
+  actions/ routes/     Wayfinder-generated route helpers — generated, do not edit
+  wayfinder/           Wayfinder runtime helpers — generated, do not edit
 routes/
   web.php              Public + dashboard routes, plus the admin and user role groups
-  settings.php         Settings routes
+  settings.php         Settings, appearance, and the passkey well-known endpoint
   console.php          Scheduled/console commands
 tests/
   Feature/             Feature tests (auth, settings, dashboard, access control, admin)
@@ -188,9 +222,19 @@ tests/
   matches the `formVariants: true` option the Vite plugin uses in `vite.config.ts`, and omitting it
   drops the `.form()` helpers that pages such as `pages/auth/login.tsx` rely on.
 - **Auth routes** are registered by Fortify, not defined in `routes/`. Run `php artisan route:list`
-  to see them.
+  to see them. The enabled features (registration, password reset, email verification, two-factor
+  authentication, passkeys) are toggled in `config/fortify.php`.
 - **Mail** defaults to the `log` driver, so verification and password-reset emails land in
   `storage/logs/laravel.log`.
+- **Settings routes** live in `routes/settings.php`: `/settings` redirects to `/settings/profile`,
+  `/settings/security` (password, 2FA, passkeys) sits behind a password confirmation, and
+  `/settings/appearance` handles the light/dark toggle. It also registers
+  `/.well-known/passkey-endpoints`, which browsers use to discover where passkeys are managed.
+- **Flash toasts** are the standard way to report the outcome of an action. The server side is
+  `Inertia::flash('toast', ['type' => 'success', 'message' => __('Saved.')])`; the client side is
+  already wired up — `use-flash-toast.ts` listens for the flash event and renders it through
+  sonner from `components/ui/sonner.tsx`, which `resources/js/app.tsx` mounts once at the root.
+  No per-page code needed.
 
 ## Roles & permissions
 
@@ -286,3 +330,36 @@ permissions) or from the `/admin/dashboard` landing page:
   holding it. Add one by declaring it in `Permission::catalog()` and re-running the seeder.
 - **Users** — search users, assign roles, and grant direct permissions on top of them. You cannot
   edit or delete your own account from here.
+
+## AI tooling (Laravel Boost)
+
+The repo ships with [Laravel Boost](https://github.com/laravel/boost), a dev-only MCP server that
+gives AI coding assistants project-aware tools — database schema inspection, read-only queries,
+version-matched documentation search, log and error reading, and URL resolution.
+
+| File          | Purpose                                                              |
+| ------------- | -------------------------------------------------------------------- |
+| `.mcp.json`   | Registers the MCP server, started via `php artisan boost:mcp`         |
+| `boost.json`  | Which agents, guidelines, and skills are installed                    |
+| `CLAUDE.md`   | Generated coding guidelines for this app's exact package versions     |
+| `.claude/`    | Installed skills (Fortify, Pest, Inertia+React, Wayfinder, Tailwind)  |
+
+Useful commands:
+
+```bash
+php artisan boost:list-skills   # what's installed
+php artisan boost:update        # refresh guidelines and skills
+```
+
+All of this is optional — none of it is loaded at runtime, and deleting it does not affect the
+application. If you don't use an AI assistant, ignore it or remove the `laravel/boost` dev
+dependency.
+
+`laravel/pao` is a related dev dependency that provides agent-optimized output for Pest, PHPUnit,
+Paratest, PHPStan and Rector. It is why a non-interactive `php artisan test --compact` run
+condenses to a single machine-readable summary line instead of the usual dot output.
+
+## License
+
+Released under the [MIT License](https://opensource.org/licenses/MIT), as declared in
+`composer.json`.

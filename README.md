@@ -176,6 +176,10 @@ composer ci:check      # everything CI runs
 (ESLint, Prettier, `tsc`) plus `composer test` (Pint, Larastan, Pest). Running `composer ci:check`
 locally reproduces the pipeline exactly.
 
+The setup step overrides `DB_CONNECTION` to SQLite, since no MySQL service runs in the workflow
+and `.env.example` defaults to MySQL. The tests themselves always use an in-memory SQLite database
+from `phpunit.xml`, regardless of what `.env` says.
+
 Dependabot is configured in `.github/dependabot.yml` to update GitHub Actions weekly.
 
 ## Project layout
@@ -361,5 +365,4 @@ condenses to a single machine-readable summary line instead of the usual dot out
 
 ## License
 
-Released under the [MIT License](https://opensource.org/licenses/MIT), as declared in
-`composer.json`.
+Released under the [MIT License](LICENSE).

@@ -31,8 +31,17 @@ jobs:
         with:
           node-version: '22'
 
+      # `composer setup` copies .env.example, which defaults to MySQL. No MySQL
+      # service runs here, so the migrate step is pointed at SQLite instead --
+      # environment variables take precedence over .env. The tests themselves
+      # use an in-memory SQLite database configured in phpunit.xml.
       - name: Setup Application
-        run: composer setup
+        run: |
+          touch database/database.sqlite
+          composer setup
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
 
       - name: Run CI Checks
         run: composer ci:check

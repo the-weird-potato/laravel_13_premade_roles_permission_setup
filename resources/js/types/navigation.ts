@@ -12,3 +12,15 @@ export type NavItem = {
     icon?: LucideIcon | null;
     isActive?: boolean;
 };
+
+/**
+ * A collapsible sidebar entry that groups child links instead of navigating.
+ */
+export type NavGroup = {
+    title: string;
+    icon?: LucideIcon | null;
+    items: NavItem[];
+    isActive?: boolean;
+};
+
+export type NavMainItem = NavItem | NavGroup;

@@ -2,9 +2,11 @@ import { Link } from '@inertiajs/react';
 import {
     BookOpen,
     FolderGit2,
+    KeyRound,
     LayoutGrid,
     ShieldCheck,
     UserRound,
+    Users,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -27,7 +29,7 @@ import { index as permissionsIndex } from '@/routes/admin/permissions';
 import { index as rolesIndex } from '@/routes/admin/roles';
 import { index as usersIndex } from '@/routes/admin/users';
 import { dashboard as userDashboard } from '@/routes/user';
-import type { NavItem } from '@/types';
+import type { NavItem, NavMainItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
     {
@@ -37,10 +39,25 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-const accessNavTargets = [
-    { permission: PERMISSIONS.viewRoles, href: rolesIndex() },
-    { permission: PERMISSIONS.viewPermissions, href: permissionsIndex() },
-    { permission: PERMISSIONS.viewUsers, href: usersIndex() },
+const accessNavItems: (NavItem & { permission: string })[] = [
+    {
+        title: 'Roles',
+        href: rolesIndex(),
+        icon: ShieldCheck,
+        permission: PERMISSIONS.viewRoles,
+    },
+    {
+        title: 'Permissions',
+        href: permissionsIndex(),
+        icon: KeyRound,
+        permission: PERMISSIONS.viewPermissions,
+    },
+    {
+        title: 'Users',
+        href: usersIndex(),
+        icon: Users,
+        permission: PERMISSIONS.viewUsers,
+    },
 ];
 
 const footerNavItems: NavItem[] = [
@@ -59,7 +76,7 @@ const footerNavItems: NavItem[] = [
 export function AppSidebar() {
     const { can, hasRole } = usePermissions();
 
-    const navItems: NavItem[] = [...mainNavItems];
+    const navItems: NavMainItem[] = [...mainNavItems];
 
     if (hasRole(ROLES.admin)) {
         navItems.push({
@@ -68,15 +85,15 @@ export function AppSidebar() {
             icon: LayoutGrid,
         });
 
-        const accessTarget = accessNavTargets.find((target) =>
-            can(target.permission),
+        const visibleAccessItems = accessNavItems.filter((item) =>
+            can(item.permission),
         );
 
-        if (accessTarget) {
+        if (visibleAccessItems.length > 0) {
             navItems.push({
                 title: 'Access control',
-                href: accessTarget.href,
                 icon: ShieldCheck,
+                items: visibleAccessItems,
             });
         }
     }
